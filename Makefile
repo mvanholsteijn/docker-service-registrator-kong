@@ -1,3 +1,3 @@
 include Makefile.mk
-USERNAME=mvanholsteijn
+USERNAME=xebia
 NAME=docker-service-registrator-kong
