@@ -4,10 +4,8 @@ import json
 import logging
 import click
 import docker
-import boto3
 import socket
 import requests
-from botocore.exceptions import ClientError
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('KongServiceRegistrator')
