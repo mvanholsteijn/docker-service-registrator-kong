@@ -92,7 +92,7 @@ class KongServiceRegistrator:
 
     def add_upstream(self, name):
 	if name not in self.upstreams:
-		e = requests.post('%s/upstreams/' % self.admin_url, json={ 'name': name })
+		r = requests.post('%s/upstreams/' % self.admin_url, json={ 'name': name })
 		if r.status_code == 409:
 			r = requests.get('%s/upstreams/%s' %(self.admin_url, name))
 
