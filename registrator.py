@@ -48,8 +48,8 @@ class KongServiceRegistrator:
 
 
     def sync_upstream(self, upstream, targets):
-	in_kong = set(map(lambda t: t['target'], self.targets[upstream]))
 	live = set(targets)
+	in_kong = set(map(lambda t: t['target'], self.targets[upstream])) if upstream in self.targets else set()
 	to_delete = in_kong - live
 	to_add = live - in_kong
 	for target in to_delete:
