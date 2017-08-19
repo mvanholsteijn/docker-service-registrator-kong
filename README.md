@@ -1,6 +1,6 @@
 # Docker service registrator for Kong
  
-manages the upstream targest registration in Kong for Docker containers running on this host.
+manages the upstream target registration in Kong for Docker containers running on this host.
 
 When a container is start, the registrator will create a upstream target for each
 exposed port of a container which has a matching `SERVICE_<exposed-port>_NAME` environment
