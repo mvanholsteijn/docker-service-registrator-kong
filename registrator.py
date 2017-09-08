@@ -209,17 +209,22 @@ class KongServiceRegistrator:
 
             hostPort = ports[port][0]['HostPort']
             name = 'KONG_%s_API' % port.split('/')[0]
+	    service_name = 'SERVICE_%s_NAME' % port.split('/')[0]
 	    api_definition = None
 
             if name in env:
 		api_definition = env[name] if name in env else None
+		upstream = 'http://%s%s' % (env[service_name], self.dns_name) if service_name in env else None
             elif 'KONG_API' in env and len(ports) == 1:
 		api_definition = env['KONG_API'] if 'KONG_API' in env else None
+		upstream = 'http://%s%s' % (env['SERVICE_NAME'], self.dns_name) if 'SERVICE_NAME' in env else None
             else:
                 continue
 
 	    try:
 		api_definition = json.loads(api_definition)
+		if upstream is not None and 'upstream_url' not in api_definition:
+			api_definition['upstream_url'] = upstream
 	    except json.JSONDecodeError as e:
 		log.error('invalid KONG API definition for port %s of container %s' % (port, container['ID']))
 		continue
