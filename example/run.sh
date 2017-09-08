@@ -43,12 +43,6 @@ while ! curl -o /dev/null http://localhost:8001/consumers ; do
 	sleep 1
 done
 
-#docker run -v $PWD/config.yml:/config.yml \
-        #--link kong:kong \
-        #xebia/kongfig \
-        #--path /config.yml \
-        #--host kong:8001
-
 docker run -d \
 	--restart unless-stopped \
         --link kong:kong \
@@ -59,15 +53,37 @@ docker run -d \
 	--no-verify-ssl \
         daemon
 
-for i in {1..4}; do
+docker run -d  -P \
+		--link kong:kong \
+		--env SERVICE_NAME=kong-dashboard \
+		--env KONG_API='{ "name": "kong-dashboard", 
+				  "uris": ["/dashboard"], 
+				  "strip_uri": true, 
+				  "preserve_host": false }' \
+		pgbi/kong-dashboard:v2
+
+for i in {1..2}; do
 	docker run -d  -P \
 		--env SERVICE_NAME=paas-monitor \
 		--env KONG_API='{ "name": "paas-monitor", 
-				  "upstream_url": "http://paas-monitor.docker.internal", 
 				  "uris": ["/paas-monitor"], 
 				  "strip_uri": true, 
 				  "preserve_host": false }' \
 		mvanholsteijn/paas-monitor:latest
 done
 
+for i in {1..2}; do
+	docker run -d  -P \
+		--env RELEASE=v2 \
+		--env SERVICE_NAME=paas-monitor-v2 \
+		--env KONG_API='{ "name": "paas-monitor-v2", 
+				  "uris": ["/paas-monitor-v2"], 
+				  "strip_uri": true, 
+				  "preserve_host": false }' \
+		mvanholsteijn/paas-monitor:latest
+done
+
+
+open http://localhost:8000/dashboard/
 open http://localhost:8000/paas-monitor/
+open http://localhost:8000/paas-monitor-v2/
