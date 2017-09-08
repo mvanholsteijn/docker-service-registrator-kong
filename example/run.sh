@@ -1,10 +1,11 @@
 #!/bin/bash
-KONG_VERSION=0.11.0
+KONG_VERSION=0.10.3
 docker pull postgres:9.4
-docker pull kong:0.11.0
+docker pull kong:$KONG_VERSION
 docker pull xebia/docker-service-registrator-kong:latest
 docker pull mvanholsteijn/paas-monitor:latest
 
+docker rm -f kong-database kong 
 docker run -d --name kong-database \
               -p 5432:5432 \
               -e POSTGRES_USER=kong \
@@ -42,11 +43,11 @@ while ! curl -o /dev/null http://localhost:8001/consumers ; do
 	sleep 1
 done
 
-docker run -v $PWD/config.yml:/config.yml \
-        --link kong:kong \
-        xebia/kongfig \
-        --path /config.yml \
-        --host kong:8001
+#docker run -v $PWD/config.yml:/config.yml \
+        #--link kong:kong \
+        #xebia/kongfig \
+        #--path /config.yml \
+        #--host kong:8001
 
 docker run -d \
 	--restart unless-stopped \
@@ -54,12 +55,18 @@ docker run -d \
 	-v /var/run/docker.sock:/var/run/docker.sock \
 	xebia/docker-service-registrator-kong:latest \
 	--hostname mvanholsteijn.local \
-	--admin-url http://kong:8001 \
+	--admin-url https://kong:8444 \
+	--no-verify-ssl \
         daemon
 
 for i in {1..4}; do
 	docker run -d  -P \
-		-e SERVICE_NAME=paas-monitor \
+		--env SERVICE_NAME=paas-monitor \
+		--env KONG_API='{ "name": "paas-monitor", 
+				  "upstream_url": "http://paas-monitor.docker.internal", 
+				  "uris": ["/paas-monitor"], 
+				  "strip_uri": true, 
+				  "preserve_host": false }' \
 		mvanholsteijn/paas-monitor:latest
 done
 

@@ -6,6 +6,7 @@ import click
 import docker
 import socket
 import requests
+from jsondiff import diff
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger('KongServiceRegistrator')
@@ -27,9 +28,9 @@ class KongServiceRegistrator:
         daemon      - continuously update targets by subscribing to the Docker event stream
         
     """
-    def __init__(self, admin_url, dns_name, hostname):
+    def __init__(self, admin_url, dns_name, hostname, verify_ssl):
         """
-        constructor. 
+        constructor.
         """
         assert dns_name is not None
         assert hostname is not None
@@ -39,13 +40,13 @@ class KongServiceRegistrator:
         self.hostname = hostname
         self.dns_name = dns_name
         self.admin_url = admin_url
-	self.upstreams = {}
-	self.targets = {}
+        self.verify_ssl = verify_ssl
+        self.upstreams = {}
+        self.targets = {}
         self.load()
-        
-        assert self.hostname == hostname        
-        assert self.dns_name == dns_name        
 
+        assert self.hostname == hostname
+        assert self.dns_name == dns_name
 
     def sync_upstream(self, upstream, targets):
 	live = set(targets)
@@ -57,11 +58,26 @@ class KongServiceRegistrator:
 	for target in to_add:
 		self.add_target(upstream, target)
 
+    def load_apis(self):
+	self.apis = {}
+	next_page = '%s/apis?size=100' % self.admin_url
+	while next_page:
+		r = requests.get(next_page, verify=self.verify_ssl)
+		if r.status_code == 200:
+			response = r.json()
+			next_page = response['next'] if 'next' in response else None
+			for api in response['data']:
+				self.apis[api['name']] = api
+		elif r.status_code == 404:
+			next_page = None
+		else:
+			log.error('failed to get apis at %s, %s' % (self.admin_url, r.text))
+
     def load_upstreams(self):
 	self.upstreams = {}
 	next_page = '%s/upstreams?size=100' % self.admin_url
 	while next_page:
-		r = requests.get(next_page)
+		r = requests.get(next_page, verify=self.verify_ssl)
 		if r.status_code == 200:
 			response = r.json()
 			next_page = response['next'] if 'next' in response else None
@@ -75,7 +91,7 @@ class KongServiceRegistrator:
 
     def load_targets(self, name):
 	self.targets[name] = []
-	r = requests.get('%s/upstreams/%s/targets/active' % (self.admin_url, name))
+	r = requests.get('%s/upstreams/%s/targets/active' % (self.admin_url, name), verify=self.verify_ssl)
 	if r.status_code == 200:
 		response = r.json()
 		owned_targets = filter(lambda t: t['target'].startswith('%s:' % self.hostname), response['data'])
@@ -92,9 +108,9 @@ class KongServiceRegistrator:
 
     def add_upstream(self, name):
 	if name not in self.upstreams:
-		r = requests.post('%s/upstreams/' % self.admin_url, json={ 'name': name })
+		r = requests.post('%s/upstreams/' % self.admin_url, json={ 'name': name }, verify=self.verify_ssl)
 		if r.status_code == 409:
-			r = requests.get('%s/upstreams/%s' %(self.admin_url, name))
+			r = requests.get('%s/upstreams/%s' %(self.admin_url, name), verify=self.verify_ssl)
 
 		if r.status_code == 200 or r.status_code == 201:
 			self.upstreams[name] = r.json()
@@ -110,7 +126,7 @@ class KongServiceRegistrator:
 	targets = self.targets[name]
 	targets = filter(lambda t: t['target'] == target and t['weight'] != 0, targets)
 	if len(targets) == 0:
-		r = requests.post('%s/upstreams/%s/targets' % (self.admin_url, name), json={ 'target': target })
+		r = requests.post('%s/upstreams/%s/targets' % (self.admin_url, name), json={ 'target': target }, verify=self.verify_ssl)
 		if r.status_code == 200 or r.status_code == 201:
 			self.targets[name].append(r.json())
 		else:
@@ -122,7 +138,7 @@ class KongServiceRegistrator:
     def remove_target(self, name, target):
 	log.info('removing target %s from upstream %s' % (target, name))
 	url = '%s/upstreams/%s/targets/%s' % (self.admin_url, name, target)
-	r = requests.delete(url)
+	r = requests.delete(url, verify=self.verify_ssl)
 	if r.status_code == 204:
 		self.targets[name] = filter(lambda t: t['target'] != target, self.targets[name])
 	else:
@@ -145,7 +161,81 @@ class KongServiceRegistrator:
 
         return result
 
-    def create_upstream_targets(self, container):
+    def sync_apis(self, apis):
+	self.load_apis()
+	for name in apis:
+	    do_update = False
+	    definition = apis[name]
+	    if name in self.apis:
+		current = self.apis[name]
+		differences = json.loads(diff(current, definition, syntax='explicit', dump=True))
+		log.debug(json.dumps(differences, sys.stderr, indent=2))
+
+		if '$update' in differences and len(differences['$update']) > 0:
+		    log.info('updating API definition %s.' % name)
+		    r = requests.patch('%s/apis/%s' % (self.admin_url, name), json=definition, verify=self.verify_ssl)
+		    if r.status_code == 200 or r.status_code == 201:
+			self.apis[name] = r.json()
+		    else:
+			log.error('failed to update %s at %s, %s' % (name, self.admin_url, r.text))
+		else:
+		    log.info('API definition %s is update.' % name)
+	    else:
+		log.info('creating API definition %s.' % name)
+		r = requests.put('%s/apis/' % self.admin_url, json=definition, verify=self.verify_ssl)
+		if r.status_code == 200 or r.status_code == 201:
+		    self.apis[name] = r.json()
+		else:
+		    log.error('failed to create %s at %s, %s' % (name, self.admin_url, r.text))
+
+	    
+
+    def get_api_definitions(self, container):
+        """
+        gets the Kong API definitions for the container.
+
+	An API is created foreach environment variable 'KONG_<port>_API' of the
+        container. If a single port is exposed, a matching KONG_API suffices.
+
+        """
+	result = {}
+        env = self.get_environment_of_container(container)
+        ports = container.attrs['NetworkSettings']['Ports']
+
+        for port in ports:
+            if ports[port] is None:
+                # no ports exposed
+                continue
+
+            hostPort = ports[port][0]['HostPort']
+            name = 'KONG_%s_API' % port.split('/')[0]
+	    api_definition = None
+
+            if name in env:
+		api_definition = env[name] if name in env else None
+            elif 'KONG_API' in env and len(ports) == 1:
+		api_definition = env['KONG_API'] if 'KONG_API' in env else None
+            else:
+                continue
+
+	    try:
+		api_definition = json.loads(api_definition)
+	    except json.JSONDecodeError as e:
+		log.error('invalid KONG API definition for port %s of container %s' % (port, container['ID']))
+		continue
+
+	    if 'name' in api_definition:
+		name = api_definition['name']
+		if name not in result:
+		    result[name] = api_definition
+		else:
+		    log.error('ignoring duplicate API definition for port %s of container %s' % (port, container['ID']))
+	    else:
+		log.error('name field missing missing in API definition for port %s of container %s' % (port, container['ID']))
+
+        return result
+
+    def get_upstream_targets(self, container):
         """
         creates upstream targets for the container.
         that has a matching environment variable 'SERVICE_<port>_NAME'.
@@ -191,10 +281,15 @@ class KongServiceRegistrator:
         """
         try:
             container = self.dockr.containers.get(container_id)
-            targets = self.create_upstream_targets(container)
+            targets = self.get_upstream_targets(container)
             if len(targets) > 0:
 		for upstream in targets:
 		    self.add_target(upstream, targets[upstream])
+
+	    apis = self.get_api_definitions(container)
+            print apis
+	    self.sync_apis(apis)
+	
         except docker.errors.NotFound as e:
             log.error('container %s does not exist.' % container_id)
 
@@ -204,16 +299,21 @@ class KongServiceRegistrator:
 	actually reflecting docker instances running on this host. 
         """
 	targets = {upstream: [] for upstream in self.targets}
+        apis = {}
 	containers = self.dockr.containers.list()
 	for container in containers:
-		container_targets  = self.create_upstream_targets(container)
+		container_targets  = self.get_upstream_targets(container)
 		for upstream in container_targets:
 			if upstream not in targets:
 				targets[upstream] = []
 			targets[upstream].append(container_targets[upstream])
 
+		container_apis = self.get_api_definitions(container)
+		apis.update(container_apis)
+
 	for upstream in targets:
 		self.sync_upstream(upstream, targets[upstream])
+	self.sync_apis(apis)
 
     def remove_all(self):
         """
@@ -246,9 +346,10 @@ class KongServiceRegistrator:
 @click.option('--dns-name', required=False, default='.docker.internal', help='to append to the service name')
 @click.option('--hostname', required=False, default=socket.getfqdn(), help='to use in target records.')
 @click.option('--admin-url', required=False, default='http://localhost:8001', help='of the Kong Admin API')
+@click.option('--verify-ssl/--no-verify-ssl', required=False, default=True, help='verify ssl connection to Kong Admin API')
 @click.pass_context
-def cli(ctx, dns_name, hostname, admin_url):
-    e = KongServiceRegistrator(admin_url, dns_name, hostname)
+def cli(ctx, dns_name, hostname, admin_url, verify_ssl):
+    e = KongServiceRegistrator(admin_url, dns_name, hostname, verify_ssl)
     ctx.obj['registrator'] = e
 
 
