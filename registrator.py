@@ -121,8 +121,8 @@ class KongServiceRegistrator(object):
                 response = r.json()
                 next_page = response['next'] if 'next' in response else None
                 for upstream in response['data']:
-		    if upstream['name'].endswith(self.dns_name):
-			self.upstreams[upstream['name']] = upstream
+                    if upstream['name'].endswith(self.dns_name):
+                        self.upstreams[upstream['name']] = upstream
             elif r.status_code == 404:
                 next_page = None
             else:
@@ -304,10 +304,14 @@ class KongServiceRegistrator(object):
         gets the environment variable for `prefix`_`port.split('/')[0]`_`postfix` or
         for `prefix`_`postfix if the number of exposed ports == 1.
 
-        if no such environment variable exists, None is returned.
+        if no such environment variable exists or `prefix`_IGNORE is set, None is returned.
         """
         env = self.get_environment_of_container(container)
         tcp_ports = self.get_all_tcp_ports(container)
+
+        ignore_name = '%s_IGNORE' % prefix
+        if ignore_name in env:
+            return None
 
         full_name = '%s_%s' % (prefix, postfix)
         port_name = '%s_%s_%s' % (prefix, port.split('/')[0], postfix)
