@@ -1,11 +1,16 @@
 # Docker service registrator for Kong
  
-manages the upstream target registration in Kong for Docker containers running on this host.
+Manages the upstream target registration in Kong for Docker containers running on this host.
 
-When a container is start, the registrator will create a upstream target for each
+When a container is started, the registrator will create a upstream target for each
 exposed port of a container which has a matching `SERVICE_<exposed-port>_NAME` environment
 variable. If the container exposes a single port, it is sufficient to have a `SERVICE_NAME`
 environment variable.
+
+In addition, if the container has an environment variable named `KONG_<exposed_port>_API`,
+containing a json string with a Kong API definition it is registered too. If the `name`
+and the `upstream_url` are missing, it will set using the SERVICE\_NAME value. If the
+container exposes a single port, it is sufficient to have a `KONG_API` variable.
 
 The registrator has three commands: remove\_all, sync and daemon.
 

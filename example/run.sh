@@ -1,5 +1,5 @@
 #!/bin/bash
-KONG_VERSION=0.10.3
+KONG_VERSION=0.11.0
 docker pull postgres:9.4
 docker pull kong:$KONG_VERSION
 docker pull xebia/docker-service-registrator-kong:latest
