@@ -1,9 +1,0 @@
-apis:
-  - name: paas-monitor
-    attributes:
-      upstream_url: http://paas-monitor.docker.internal
-      uris: '/paas-monitor'
-      strip_uri: true
-      preserve_host: false
-      https_only: false 
-      http_if_terminated: true

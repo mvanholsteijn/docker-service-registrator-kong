@@ -2,10 +2,9 @@
 KONG_VERSION=0.11.0
 docker pull postgres:9.4
 docker pull kong:$KONG_VERSION
-docker pull xebia/docker-service-registrator-kong:latest
-docker pull mvanholsteijn/paas-monitor:latest
 
-docker rm -f kong-database kong 
+docker rm -f kong-database kong kong-dashboard kong-registrator
+
 docker run -d --name kong-database \
               -p 5432:5432 \
               -e POSTGRES_USER=kong \
@@ -45,6 +44,7 @@ while ! curl -o /dev/null http://localhost:8001/consumers ; do
 done
 
 docker run -d \
+        --name kong-registrator \
 	--restart unless-stopped \
         --link kong:kong \
 	-v /var/run/docker.sock:/var/run/docker.sock \
@@ -55,36 +55,11 @@ docker run -d \
         daemon
 
 docker run -d  -P \
-		--link kong:kong \
-		--env SERVICE_NAME=kong-dashboard \
-		--env KONG_API='{ "name": "kong-dashboard", 
-				  "uris": ["/dashboard"], 
-				  "strip_uri": true, 
-				  "preserve_host": false }' \
-		pgbi/kong-dashboard:v2
-
-for i in {1..2}; do
-	docker run -d  -P \
-		--env SERVICE_NAME=paas-monitor \
-		--env KONG_API='{ "name": "paas-monitor", 
-				  "uris": ["/paas-monitor"], 
-				  "strip_uri": true, 
-				  "preserve_host": false }' \
-		mvanholsteijn/paas-monitor:latest
-done
-
-for i in {1..2}; do
-	docker run -d  -P \
-		--env RELEASE=v2 \
-		--env SERVICE_NAME=paas-monitor-v2 \
-		--env KONG_API='{ "name": "paas-monitor-v2", 
-				  "uris": ["/paas-monitor-v2"], 
-				  "strip_uri": true, 
-				  "preserve_host": false }' \
-		mvanholsteijn/paas-monitor:latest
-done
-
-
-open http://localhost:8000/dashboard/
-open http://localhost:8000/paas-monitor/
-open http://localhost:8000/paas-monitor-v2/
+	--name kong-dashboard \
+	--link kong:kong \
+	--env SERVICE_NAME=kong-dashboard \
+	--env KONG_API='{ "name": "kong-dashboard", 
+			  "uris": ["/dashboard"], 
+			  "strip_uri": true, 
+			  "preserve_host": false }' \
+	pgbi/kong-dashboard:v2
