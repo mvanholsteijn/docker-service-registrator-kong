@@ -170,9 +170,9 @@ class KongServiceRegistrator(object):
                 r = requests.get(
                     '%s/upstreams/%s' % (self.admin_url, name),
                     verify=self.verify_ssl)
-
             if r.status_code == 200 or r.status_code == 201:
                 self.upstreams[name] = r.json()
+                self.targets[name] = []
             else:
                 log.error(
                     'failed to add upstream %s at %s, status code %d, %s',
