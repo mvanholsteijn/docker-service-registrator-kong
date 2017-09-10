@@ -121,14 +121,13 @@ class KongServiceRegistrator(object):
                 response = r.json()
                 next_page = response['next'] if 'next' in response else None
                 for upstream in response['data']:
-                    self.upstreams[upstream['name']] = upstream
+		    if upstream['name'].endswith(self.dns_name):
+			self.upstreams[upstream['name']] = upstream
             elif r.status_code == 404:
                 next_page = None
             else:
                 log.error('failed to get upstreams at %s, %s',
                           self.admin_url, r.text)
-        self.upstreams = filter(lambda u: u.endswith(
-            self.dns_name), self.upstreams)
 
     def load_targets(self, name):
         """
