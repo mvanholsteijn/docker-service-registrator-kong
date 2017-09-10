@@ -42,3 +42,6 @@ you must specify, either the dns name or the Route53 hosted zone id:
   --admin_url TEXT       pointing to the Kong admin API, defaults to http://localhost:8001
   --hostname HOSTNAME    to use in targets.
 ```
+
+# CAVEATS
+Currently deleting targets is not reliable due to Kong API gateway issue [#2876](https://github.com/Mashape/kong/issues/2876).
