@@ -35,7 +35,8 @@ docker run -d --name kong \
     -p 8443:8443 \
     -p 8001:8001 \
     -p 8444:8444 \
-    kong:$KONG_VERSION
+    -p 7946:7946 \
+    kong:$KONG_VERSION kong start --vv
 
 echo 'waiting for kong.'
 while ! curl -o /dev/null http://localhost:8001/consumers ; do
