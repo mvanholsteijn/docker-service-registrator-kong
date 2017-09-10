@@ -231,12 +231,8 @@ class KongServiceRegistrator(object):
                 'failed to remove target %s from upstream %s at %s: %d, %s',
                 target, name, r.url, r.status_code, r.text)
 
-        print json.dumps(filter(lambda t: t['id'] == target_id, self.targets[name]), indent=2)
-        print len(self.targets[name])
         self.targets[name] = filter(
             lambda t: t['id'] != target_id, self.targets[name])
-        print len(self.targets[name])
-        print json.dumps(filter(lambda t: t['id'] == target_id, self.targets[name]), indent=2)
 
     def get_environment_of_container(self, container):
         """
