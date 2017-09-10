@@ -21,6 +21,7 @@ import click
 import docker
 import requests
 from jsondiff import diff
+from jsondiff.symbols import Symbol
 import urllib3
 
 logging.basicConfig(level=logging.INFO)
@@ -261,8 +262,8 @@ class KongServiceRegistrator(object):
                                 # for update
                 current = self.apis[name]
                 differences = diff(current, definition, syntax='explicit')
-                if '$update' in differences and len(
-                        differences['$update']) > 0:
+                has_update = filter(lambda k: k.label == 'update', differences.keys())
+                if len(has_update) > 0:
                     log.info('updating API definition %s.', name)
                     r = requests.patch(
                         '%s/apis/%s' % (self.admin_url, name),
@@ -273,7 +274,7 @@ class KongServiceRegistrator(object):
                         log.error('failed to update %s at %s, %s',
                                   name, self.admin_url, r.text)
                 else:
-                    log.debug('API definition %s is up-to-date.', name)
+                    log.info('API definition %s is up-to-date.', name)
             else:
                 log.info('creating API definition %s.', name)
                 r = requests.put('%s/apis/' % self.admin_url,
