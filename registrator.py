@@ -87,7 +87,7 @@ class KongServiceRegistrator(object):
         to_delete = in_kong - live
         to_add = live - in_kong
         for target in to_delete:
-            self.remove_targets(upstream, target)
+            self.remove_target(upstream, target)
         for target in to_add:
             self.add_target(upstream, target)
 
@@ -152,7 +152,8 @@ class KongServiceRegistrator(object):
                     targets[target_name] = target
 
             for target_name in targets:
-                self.targets[upstream].append(targets[target_name])
+                if targets[target_name]['weight'] != 0:
+                    self.targets[upstream].append(targets[target_name])
 
         elif r.status_code == 404:
             pass  # no targets yet..
@@ -218,22 +219,13 @@ class KongServiceRegistrator(object):
                 name)
             pass
 
-    def remove_targets(self, upstream, target):
-        """
-        remove all targets from the upstream. Kong sometimes creates multiple logical targets
-        """
-        target_ids = set(map(lambda t: t['id'], filter(
-            lambda t: t['target'] == target and t['weight'] > 0, self.targets[upstream])))
-        for target_id in target_ids:
-            self.remove_target(upstream, target, target_id)
-
-    def remove_target(self, name, target, target_id):
+    def remove_target(self, name, target):
         """
         remove the target `target` from the upstream `name` in Kong.
         """
-        log.info('removing target %s (%s) from upstream %s',
-                 target, target_id, name)
-        url = '%s/upstreams/%s/targets/%s' % (self.admin_url, name, target_id)
+        log.info('removing target %s from upstream %s',
+                 target, name)
+        url = '%s/upstreams/%s/targets/%s' % (self.admin_url, name, target)
         r = requests.delete(url, verify=self.verify_ssl)
         if r.status_code != 204:
             log.error(
@@ -241,7 +233,7 @@ class KongServiceRegistrator(object):
                 target, name, r.url, r.status_code, r.text)
 
         self.targets[name] = filter(
-            lambda t: t['id'] != target_id, self.targets[name])
+            lambda t: t['target'] != target, self.targets[name])
 
     def get_environment_of_container(self, container):
         """
@@ -486,7 +478,7 @@ class KongServiceRegistrator(object):
         """
         for upstream in self.targets:
             for target in self.targets[upstream]:
-                self.remove_target(upstream, target['target'], target['id'])
+                self.remove_target(upstream, target['target'])
 
     def process_events(self):
         """
