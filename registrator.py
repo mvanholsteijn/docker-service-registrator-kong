@@ -130,26 +130,35 @@ class KongServiceRegistrator(object):
                 log.error('failed to get upstreams at %s, %s',
                           self.admin_url, r.text)
 
-    def load_targets(self, name):
+    def load_targets(self, upstream):
         """
-        load all targets pointing to `self.hostname` for the upstream 'name'.
+        load all targets pointing to `self.hostname` for the upstream 'upstream'.
         """
-        self.targets[name] = []
+        self.targets[upstream] = []
         if self.below_v_0_11:
-            url = '%s/upstreams/%s/targets/active' % (self.admin_url, name)
+            url = '%s/upstreams/%s/targets/active' % (self.admin_url, upstream)
         else:
-            url = '%s/upstreams/%s/targets' % (self.admin_url, name)
+            url = '%s/upstreams/%s/targets' % (self.admin_url, upstream)
         r = requests.get(url, verify=self.verify_ssl)
         if r.status_code == 200:
             response = r.json()
-            owned_targets = filter(lambda t: t['target'].startswith(
-                '%s:' % self.hostname), response['data'])
-            self.targets[name].extend(owned_targets)
+            targets = {}
+            for target in response['data']:
+                target_name = target['target']
+                # filter the targets for this hostname and find the newest
+                # definition.
+                if target_name.startswith('%s:' % self.hostname) and(target_name not in targets or
+                                                                     targets[target_name]['created_at'] < target['created_at']):
+                    targets[target_name] = target
+
+            for target_name in targets:
+                self.targets[upstream].append(targets[target_name])
+
         elif r.status_code == 404:
             pass  # no targets yet..
         else:
             log.error('failed to get targets of %s at %s, %d, %s',
-                      name, r.url, r.status_code, r.text)
+                      upstream, r.url, r.status_code, r.text)
 
     def load(self):
         """

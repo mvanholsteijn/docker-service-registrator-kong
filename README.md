@@ -43,5 +43,3 @@ you must specify, either the dns name or the Route53 hosted zone id:
   --hostname HOSTNAME    to use in targets.
 ```
 
-# CAVEATS
-Currently deleting targets is not reliable due to Kong API gateway issue [#2876](https://github.com/Mashape/kong/issues/2876).
