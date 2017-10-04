@@ -12,7 +12,7 @@ containing a json string with a Kong API definition it is registered too. If the
 and the `upstream_url` are missing, it will set using the SERVICE\_NAME value. If the
 container exposes a single port, it is sufficient to have a `KONG_API` variable.
 
-The registrator has three commands: remove\_all, sync and daemon.
+The registrator has three commands: remove\-all, sync and daemon.
 
 ## Daemon mode
 When the registrator starts in daemon mode it will first do a full sync, to ensure that
@@ -25,12 +25,12 @@ You can run a standalone sync command to ensure that the upstream targets are
 actually reflecting docker instances running on this host. 
 
 ## Remove all
-When the host is shutdown, it is wise to run the remove\_all command to upstream
+When the host is shutdown, it is wise to run the remove\-all command to upstream
 targets pointing to this host.
 
 
 ```
-remove_all  - remove all upstream targets pointing to this host, but run on host shutdown
+remove-all  - remove all upstream targets pointing to this host, but run on host shutdown
 sync        - synchronise the upstream targets with the running containers 
 daemon      - continuously update the upstream targets by subscribing to the Docker event stream
 ```

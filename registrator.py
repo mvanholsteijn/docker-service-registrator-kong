@@ -7,9 +7,9 @@
     variable. If the container exposes a single port, it suffices to have a SERVICE_NAME
     environment variable.
 
-    The registrator has three commands: 'remove_all', 'sync' and 'daemon'.
+    The registrator has three commands: 'remove-all', 'sync' and 'daemon'.
 
-        remove_all  - remove all targets pointing to this host
+        remove-all  - remove all targets pointing to this host
         sync        - synchronise the targets  with the running containers
         daemon      - continuously update targets by subscribing to the Docker event stream
 
@@ -52,30 +52,11 @@ class KongServiceRegistrator(object):
         self.upstreams = {}
         self.targets = {}
         self.apis = {}
-        self.kong_version = [0, 11, 0]
-        self.below_v_0_11 = False
 
         self.load()
 
         assert self.hostname == hostname
         assert self.dns_name == dns_name
-
-    def get_kong_version(self):
-        """
-        get the version of the Kong API, and set self.kong_version and self.below_v_0_11.
-        """
-        info = {}
-        r = requests.get(self.admin_url)
-        if r.status_code == 200:
-            info = r.json()
-        else:
-            log.error('Failed to get Kong API information from %s, %d, %s',
-                      r.url, r.status_code, r.text)
-
-        v = info['version'] if 'version' in info else '0.11.0'
-        self.kong_version = [int(n) for n in v]
-        self.below_v_0_11 = self.kong_version[
-            0] == 0 and self.kong_version[1] < 11
 
     def sync_upstream(self, upstream, targets):
         """
@@ -135,25 +116,12 @@ class KongServiceRegistrator(object):
         load all targets pointing to `self.hostname` for the upstream 'upstream'.
         """
         self.targets[upstream] = []
-        if self.below_v_0_11:
-            url = '%s/upstreams/%s/targets/active' % (self.admin_url, upstream)
-        else:
-            url = '%s/upstreams/%s/targets' % (self.admin_url, upstream)
+        url = '%s/upstreams/%s/targets/active/' % (self.admin_url, upstream)
         r = requests.get(url, verify=self.verify_ssl)
         if r.status_code == 200:
             response = r.json()
-            targets = {}
-            for target in response['data']:
-                target_name = target['target']
-                # filter the targets for this hostname and find the newest
-                # definition.
-                if target_name.startswith('%s:' % self.hostname) and(target_name not in targets or
-                                                                     targets[target_name]['created_at'] < target['created_at']):
-                    targets[target_name] = target
-
-            for target_name in targets:
-                if targets[target_name]['weight'] != 0:
-                    self.targets[upstream].append(targets[target_name])
+	    own_targets = filter(lambda t: t['target'].startswith('%s:' % self.hostname), response['data'])
+	    self.targets[upstream].extend(own_targets)
 
         elif r.status_code == 404:
             pass  # no targets yet..
