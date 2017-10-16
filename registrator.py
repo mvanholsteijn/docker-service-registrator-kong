@@ -14,6 +14,7 @@
         daemon      - continuously update targets by subscribing to the Docker event stream
 
 """
+import os
 import socket
 import json
 import logging
@@ -24,9 +25,8 @@ from jsondiff import diff
 from jsondiff.symbols import Symbol
 import urllib3
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=os.getenv('LOG_LEVEL',logging.INFO))
 log = logging.getLogger('KongServiceRegistrator')
-log.setLevel('INFO')
 
 #
 # disable warnings on ssl usage (really irritating if you explicitly specify verify_ssl = False)
@@ -343,14 +343,14 @@ class KongServiceRegistrator(object):
             except ValueError as e:
                 log.error(
                     'invalid KONG API definition for port %s of container %s, %s',
-                    port, container['ID'],
+                    port, container.name,
                     e.message)
                 continue
 
             if 'name' not in api_definition:
                 log.error(
                     'name field missing missing in API definition for port %s of container %s',
-                    port, container['ID'])
+                    port, container.name)
                 continue
 
             name = api_definition['name']
@@ -359,7 +359,7 @@ class KongServiceRegistrator(object):
             else:
                 log.error(
                     'ignoring duplicate API definition for port %s of container %s',
-                    port, container['ID'])
+                    port, container.name)
 
         return result
 
@@ -390,7 +390,7 @@ class KongServiceRegistrator(object):
             elif upstream is not None:
                 log.warn(
                     'ignoring duplicate service name for port %s of container %s',
-                    port, container['ID'])
+                    port, container.name)
 
         return result
 
@@ -407,13 +407,18 @@ class KongServiceRegistrator(object):
         """
         try:
             container = self.dockr.containers.get(container_id)
-            targets = self.get_upstream_targets(container)
-            if len(targets) > 0:
-                for upstream in targets:
-                    self.add_target(upstream, targets[upstream])
+            state = container.attrs['State']['Health']['Status'] if 'Health' in container.attrs['State'] else  'running'
+	    if state == 'unhealthy':
+                log.info('container %s is unhealthy.', container.name)
+		return
 
-            apis = self.get_api_definitions(container)
-            self.sync_apis(apis)
+	    targets = self.get_upstream_targets(container)
+	    if len(targets) > 0:
+		for upstream in targets:
+		    self.add_target(upstream, targets[upstream])
+
+	    apis = self.get_api_definitions(container)
+	    self.sync_apis(apis)
 
         except docker.errors.NotFound:
             log.error('container %s does not exist.', container_id)
@@ -427,14 +432,19 @@ class KongServiceRegistrator(object):
         apis = {}
         containers = self.dockr.containers.list()
         for container in containers:
-            container_targets = self.get_upstream_targets(container)
-            for upstream in container_targets:
-                if upstream not in targets:
-                    targets[upstream] = []
-                targets[upstream].append(container_targets[upstream])
+            state = container.attrs['State']['Health']['Status'] if 'Health' in container.attrs['State'] else  'running'
 
-            container_apis = self.get_api_definitions(container)
-            apis.update(container_apis)
+            if state != 'unhealthy':
+		container_targets = self.get_upstream_targets(container)
+		for upstream in container_targets:
+		  if upstream not in targets:
+		      targets[upstream] = []
+		  targets[upstream].append(container_targets[upstream])
+
+		container_apis = self.get_api_definitions(container)
+		apis.update(container_apis)
+	    else:
+                log.info('skipping container %s is unhealthy.', container.name)
 
         for upstream in targets:
             self.sync_upstream(upstream, targets[upstream])
@@ -457,12 +467,12 @@ class KongServiceRegistrator(object):
             for line in lines:
                 event = json.loads(line)
                 if event['Type'] == 'container':
-                    if event['status'] == 'start':
+                    if event['status'] == 'start' or event['status'] == 'health_status: healthy':
                         self.container_started(event['id'])
-                    elif event['status'] == 'die':
+                    if event['status'] == 'die' or event['status'] == 'health_status: unhealthy':
                         self.container_died()
-                    else:
-                        log.debug('skipping event %s', event['status'])
+		    else:
+                        log.debug('skipping event "%s"', event['status'])
                 else:
                     pass  # boring...
 
