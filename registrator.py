@@ -407,18 +407,18 @@ class KongServiceRegistrator(object):
         """
         try:
             container = self.dockr.containers.get(container_id)
-            state = container.attrs['State']['Health']['Status'] if 'Health' in container.attrs['State'] else  'running'
-	    if state == 'unhealthy':
-                log.info('container %s is unhealthy.', container.name)
+            state = container.attrs['State']['Health']['Status'] if 'Health' in container.attrs['State'] else None
+	    if state is None or state == 'healthy':
+		targets = self.get_upstream_targets(container)
+		if len(targets) > 0:
+		    for upstream in targets:
+			self.add_target(upstream, targets[upstream])
+
+		apis = self.get_api_definitions(container)
+		self.sync_apis(apis)
+	    else:
+                log.info('container %s is not healthy.', container.name)
 		return
-
-	    targets = self.get_upstream_targets(container)
-	    if len(targets) > 0:
-		for upstream in targets:
-		    self.add_target(upstream, targets[upstream])
-
-	    apis = self.get_api_definitions(container)
-	    self.sync_apis(apis)
 
         except docker.errors.NotFound:
             log.error('container %s does not exist.', container_id)
@@ -432,9 +432,9 @@ class KongServiceRegistrator(object):
         apis = {}
         containers = self.dockr.containers.list()
         for container in containers:
-            state = container.attrs['State']['Health']['Status'] if 'Health' in container.attrs['State'] else  'running'
+            state = container.attrs['State']['Health']['Status'] if 'Health' in container.attrs['State'] else  None
 
-            if state != 'unhealthy':
+            if state is None or state == 'healthy':
 		container_targets = self.get_upstream_targets(container)
 		for upstream in container_targets:
 		  if upstream not in targets:
@@ -444,7 +444,7 @@ class KongServiceRegistrator(object):
 		container_apis = self.get_api_definitions(container)
 		apis.update(container_apis)
 	    else:
-                log.info('skipping container %s is unhealthy.', container.name)
+                log.info('container %s is not healthy.', container.name)
 
         for upstream in targets:
             self.sync_upstream(upstream, targets[upstream])
