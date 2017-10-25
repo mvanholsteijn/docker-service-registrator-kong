@@ -1,6 +1,7 @@
 #!/bin/bash
 KONG_VERSION=0.11.0
-docker pull postgres:9.4
+PG_VERSION=9.6
+docker pull postgres:$PG_VERSION
 docker pull kong:$KONG_VERSION
 
 docker rm -f kong-database kong kong-dashboard kong-registrator
@@ -9,7 +10,7 @@ docker run -d --name kong-database \
               -p 5432:5432 \
               -e POSTGRES_USER=kong \
               -e POSTGRES_DB=kong \
-              postgres:9.4
+              postgres:$PG_VERSION
 
 echo 'waiting for postgres.'
 while ! docker exec -i -e PGPASSWORD=kong kong-database psql --host localhost --user kong < /dev/null > /dev/null 2>&1; do
